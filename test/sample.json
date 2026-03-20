@@ -1,4 +1,417 @@
 {
-  "vendor": "サンプル商店",
-  "amount": 1000
+  "description": "領収書自動処理システム テストデータ v1.5",
+  "updated": "2026-03-20",
+  "cases": [
+
+    {
+      "id": "TC-001",
+      "description": "国内領収書・通常ケース（ソフトバンク）",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_softbank",
+            "expenseType": "corporate"
+          }
+        ]
+      },
+      "expected": {
+        "debit_account": "通信費",
+        "original_amount": 4180,
+        "booked_amount": 627,
+        "apply_home_office_rule": true,
+        "currency": "JPY",
+        "credit_account": "短期借入金",
+        "reconcile_status": "unreconciled",
+        "needs_review": false,
+        "qualified_invoice_number": "T9010401052465",
+        "file_name_pattern": "20260228_通信費_ソフトバンク株式会社_4180_[A-Za-z0-9]{6}.pdf"
+      },
+      "notes": "家事按分15%適用。bookedAmount = round(4180 × 0.15) = 627"
+    },
+
+    {
+      "id": "TC-002",
+      "description": "国内領収書・光熱費（東京ガス）",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_tokyogas",
+            "expenseType": "corporate"
+          }
+        ]
+      },
+      "expected": {
+        "debit_account": "水道光熱費",
+        "original_amount": 10289,
+        "booked_amount": 1543,
+        "apply_home_office_rule": true,
+        "currency": "JPY",
+        "credit_account": "短期借入金",
+        "reconcile_status": "unreconciled",
+        "needs_review": true,
+        "review_note_contains": "使用期間が異なる",
+        "service_period_start": "2025-12-03",
+        "service_period_end": "2026-01-06"
+      },
+      "notes": "家事按分15%適用。複数サービス・期間混在のためneedsReview=true"
+    },
+
+    {
+      "id": "TC-003",
+      "description": "外貨領収書（Genspark USD）",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_genspark_0113",
+            "expenseType": "corporate"
+          }
+        ]
+      },
+      "expected": {
+        "debit_account": "消耗品費",
+        "original_amount": 22,
+        "currency": "USD",
+        "fx_rate": 158.28,
+        "fx_rate_source": "77bank_TTM",
+        "fx_provisional": true,
+        "booked_amount": 3482,
+        "apply_home_office_rule": false,
+        "credit_account": "短期借入金",
+        "reconcile_status": "unreconciled",
+        "needs_review": true,
+        "review_note_contains": "77銀行仲値レートによる仮換算",
+        "file_name_pattern": "20260113_消耗品費_MainFunc_PTE._LTD._22_[A-Za-z0-9]{6}.pdf"
+      },
+      "notes": "外貨USD。77銀行仲値で仮換算。MF照合後に確定"
+    },
+
+    {
+      "id": "TC-004",
+      "description": "外貨領収書・同額重複ケース（Genspark USD 2回目）",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_genspark_0126",
+            "expenseType": "corporate"
+          }
+        ]
+      },
+      "expected": {
+        "debit_account": "消耗品費",
+        "original_amount": 22,
+        "currency": "USD",
+        "fx_rate": 154.85,
+        "booked_amount": 3407,
+        "needs_review": true,
+        "file_name_pattern": "20260126_消耗品費_MainFunc_PTE._LTD._22_[A-Za-z0-9]{6}.pdf"
+      },
+      "notes": "TC-003と同額・同取引先。銀行照合時は全候補提示してユーザーが選択"
+    },
+
+    {
+      "id": "TC-005",
+      "description": "飲食代・memoなしケース（Espresso D Works）",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_espresso",
+            "expenseType": "corporate"
+          }
+        ]
+      },
+      "expected": {
+        "debit_account": "会議費",
+        "original_amount": 10296,
+        "booked_amount": 10296,
+        "apply_home_office_rule": false,
+        "currency": "JPY",
+        "credit_account": "短期借入金",
+        "reconcile_status": "unreconciled",
+        "needs_review": true,
+        "review_note_contains": "会議費・交際費の別を確認"
+      },
+      "notes": "飲食代はデフォルトneedsReview=true。月末レビュー時にAIがmemoを確認"
+    },
+
+    {
+      "id": "TC-006",
+      "description": "finalize重複呼び出しエラー",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_softbank",
+            "expenseType": "corporate",
+            "refinalize": false
+          }
+        ]
+      },
+      "expected": {
+        "status": "error",
+        "code": "ALREADY_FINALIZED"
+      },
+      "notes": "同一receiptKeyへの2回目のfinalizeはエラー。refinalize:trueで再処理可能"
+    },
+
+    {
+      "id": "TC-007",
+      "description": "finalize再処理（refinalize=true）",
+      "input": {
+        "mode": "finalize",
+        "token": "test_token",
+        "receipts": [
+          {
+            "receiptKey": "drive_file_id_softbank",
+            "expenseType": "corporate",
+            "refinalize": true
+          }
+        ]
+      },
+      "expected": {
+        "status": "ok"
+      },
+      "notes": "refinalize:trueを付与した場合のみ再処理を許可"
+    },
+
+    {
+      "id": "TC-008",
+      "description": "銀行照合・GMOあおぞら",
+      "input": {
+        "mode": "reconcile",
+        "token": "test_token",
+        "source": "gmo_aozora",
+        "data": [
+          {
+            "date": "2026-02-28",
+            "amount": -4180,
+            "vendor": "ソフトバンク"
+          }
+        ]
+      },
+      "expected": {
+        "status": "ok",
+        "results": [
+          {
+            "status": "reconciled",
+            "paymentDate": "2026-02-28"
+          }
+        ]
+      },
+      "notes": "照合キーはoriginalAmount（4180）。bookedAmount（627）ではない"
+    },
+
+    {
+      "id": "TC-009",
+      "description": "銀行照合・ホワイトリスト外の取引は無視",
+      "input": {
+        "mode": "reconcile",
+        "token": "test_token",
+        "source": "moneyforward",
+        "data": [
+          {
+            "date": "2026-03-13",
+            "amount": -1760,
+            "vendor": "Amazon.co.jp",
+            "description": "ミノン アミノモイスト",
+            "mfTransactionId": "e18sZk13pofV_4KIbn_wUjOowdSRhcDqmebBSrxvCEk"
+          }
+        ]
+      },
+      "expected": {
+        "status": "ok",
+        "results": []
+      },
+      "notes": "Amazonの日用品はホワイトリスト外のため完全無視"
+    },
+
+    {
+      "id": "TC-010",
+      "description": "領収書なし経費登録（家賃）",
+      "input": {
+        "mode": "no_receipt",
+        "token": "test_token",
+        "entry": {
+          "transaction_date": "2026-03-31",
+          "vendor": "家主",
+          "debit_account": "地代家賃",
+          "original_amount": 190000,
+          "expense_type": "corporate",
+          "memo": "3月分家賃"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "booked_amount": 28500,
+        "apply_home_office_rule": true,
+        "no_receipt": true,
+        "reconcile_status": "unreconciled"
+      },
+      "notes": "家賃は家事按分15%適用。bookedAmount = round(190000 × 0.15) = 28500"
+    },
+
+    {
+      "id": "TC-011",
+      "description": "交通費登録（領収書なし）",
+      "input": {
+        "mode": "no_receipt",
+        "token": "test_token",
+        "entry": {
+          "transaction_date": "2026-01-04",
+          "vendor": "京急・東京メトロ",
+          "debit_account": "旅費交通費",
+          "original_amount": 199,
+          "currency": "JPY",
+          "expense_type": "corporate",
+          "route": "新馬場→神田",
+          "memo": "クライアント訪問"
+        }
+      },
+      "expected": {
+        "status": "ok",
+        "no_receipt": true,
+        "apply_home_office_rule": false,
+        "booked_amount": 199,
+        "reconcile_status": "unreconciled"
+      },
+      "notes": "交通費は家事按分対象外"
+    },
+
+    {
+      "id": "TC-012",
+      "description": "論理削除",
+      "input": {
+        "mode": "review",
+        "token": "test_token",
+        "action": "update",
+        "receiptKey": "drive_file_id_espresso",
+        "updates": {
+          "is_deleted": true,
+          "delete_reason": "重複登録のため削除"
+        }
+      },
+      "expected": {
+        "status": "ok"
+      },
+      "notes": "論理削除。物理削除は行わない。Driveファイルはdeleted/フォルダへ移動"
+    },
+
+    {
+      "id": "TC-013",
+      "description": "グローバルレビュー・重複検知",
+      "input": {
+        "mode": "global_review",
+        "token": "test_token",
+        "reviewMode": "light"
+      },
+      "expected": {
+        "status": "ok",
+        "alerts_contain": [
+          {
+            "type": "duplicate_entry",
+            "severity": "high"
+          }
+        ]
+      },
+      "notes": "TC-003とTC-004は同日・同金額・同取引先のため重複アラートが発生する"
+    },
+
+    {
+      "id": "TC-014",
+      "description": "stage・複数ファイル一部失敗",
+      "input": {
+        "mode": "stage",
+        "token": "test_token",
+        "files": [
+          { "url": "https://valid-url.example.com/receipt.pdf" },
+          { "url": "https://invalid-url.example.com/notfound.pdf" }
+        ]
+      },
+      "expected": {
+        "status": "partial_ok",
+        "results_count": 2,
+        "success_count": 1,
+        "error_count": 1
+      },
+      "notes": "一部失敗時はpartial_okで成功分のみ返却"
+    },
+
+    {
+      "id": "TC-015",
+      "description": "認証失敗",
+      "input": {
+        "mode": "finalize",
+        "token": "wrong_token",
+        "receipts": []
+      },
+      "expected": {
+        "status": "error",
+        "code": "UNAUTHORIZED"
+      },
+      "notes": "不正なトークンは401エラー"
+    }
+
+  ],
+
+  "reconcile_status_transitions": {
+    "description": "reconcileStatusの遷移パターン",
+    "patterns": [
+      {
+        "from": "unreconciled",
+        "to": "reconciled",
+        "trigger": "銀行照合成功",
+        "credit_account_change": "短期借入金 → 普通預金（照合口座）"
+      },
+      {
+        "from": "reconciled",
+        "to": "reconciled_modified",
+        "trigger": "照合後に手動修正",
+        "credit_account_change": "変更なし"
+      },
+      {
+        "from": "unreconciled",
+        "to": "cash_payment",
+        "trigger": "ユーザーが現金払いと確定",
+        "credit_account_change": "短期借入金のまま"
+      },
+      {
+        "from": "unreconciled",
+        "to": "reconcile_pending",
+        "trigger": "通帳待ち等",
+        "credit_account_change": "短期借入金のまま"
+      }
+    ]
+  },
+
+  "fx_rate_test_cases": {
+    "description": "為替レート仮換算テストケース",
+    "cases": [
+      {
+        "date": "2026-01-13",
+        "currency": "USD",
+        "amount": 22,
+        "rate": 158.28,
+        "expected_booked_amount": 3482,
+        "url": "https://www.77bank.co.jp/kawase/usd2026.html"
+      },
+      {
+        "date": "2026-01-26",
+        "currency": "USD",
+        "amount": 22,
+        "rate": 154.85,
+        "expected_booked_amount": 3407,
+        "url": "https://www.77bank.co.jp/kawase/usd2026.html"
+      }
+    ]
+  }
 }
