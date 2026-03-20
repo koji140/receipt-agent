@@ -1,2 +1,31 @@
+# ログファイル
 *.log
+
+# clasp（GASローカル開発ツール）設定
+# APIトークン等の秘密情報が含まれるため除外
 .clasp.json
+
+# 環境変数・秘密情報ファイル
+.env
+.env.local
+secrets.json
+credentials.json
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# エディタ設定
+.vscode/
+.idea/
+
+# テスト出力
+test/output/
+test/*.result.json
+
+# 一時ファイル
+tmp/
+*.tmp
