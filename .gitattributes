@@ -1,2 +1,14 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# JavaScript (GAS)
+*.gs text eol=lf
+
+# Markdown
+*.md text eol=lf
+
+# JSON
+*.json text eol=lf
+
+# 日本語ファイルの文字化け防止
+*.md diff=markdown
