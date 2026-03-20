@@ -45,9 +45,13 @@ function authenticate_(e) {
       token = JSON.parse(e.postData.contents).token;
     } catch (_) {}
   }
+  if (!token && e.parameter && e.parameter.payload) {
+    try {
+      token = JSON.parse(decodeURIComponent(e.parameter.payload)).token;
+    } catch (_) {}
+  }
   if (token !== props.getProperty('API_TOKEN')) {
-    throw { code: 'UNAUTHORIZED', status: 401,
-            message: '認証失敗' };
+    throw { code: 'UNAUTHORIZED', status: 401, message: '認証失敗' };
   }
 }
 
@@ -1220,4 +1224,42 @@ function testFinalize() {
   
   const result = handleFinalize_(payload);
   Logger.log(JSON.stringify(result, null, 2));
+}
+
+function doGet(e) {
+  try {
+    Logger.log('doGet開始');
+    const params = e.parameter;
+    Logger.log('params: ' + JSON.stringify(params));
+    
+    if (params && params.payload) {
+      const payload = JSON.parse(decodeURIComponent(params.payload));
+      Logger.log('payload: ' + JSON.stringify(payload));
+      
+      authenticate_({ parameter: params, postData: { contents: JSON.stringify(payload) } });
+      Logger.log('認証OK');
+      
+      const mode = payload.mode;
+      Logger.log('mode: ' + mode);
+      
+      switch (mode) {
+        case 'finalize':
+          Logger.log('finalize開始');
+          const result = handleFinalize_(payload);
+          Logger.log('finalize完了: ' + JSON.stringify(result));
+          return respond_(result);
+        case 'reconcile': return respond_(handleReconcile_(payload));
+        case 'no_receipt': return respond_(handleNoReceipt_(payload));
+        case 'review': return respond_(handleReview_(payload));
+        case 'global_review': return respond_(handleGlobalReview_(payload));
+        default:
+          return respond_({ status: 'error', code: 'REQUEST_INVALID', message: `Unknown mode: ${mode}` }, 400);
+      }
+    }
+    Logger.log('payloadなし');
+    return respond_({ status: 'ok', message: 'Receipt Agent API is running' });
+  } catch (err) {
+    Logger.log('エラー: ' + err.message + ' / code: ' + err.code);
+    return respond_({ status: 'error', code: err.code || 'UNKNOWN', message: err.message });
+  }
 }
