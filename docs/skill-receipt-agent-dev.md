@@ -322,3 +322,10 @@ stageハンドラ	サブフロー限定（将来用）	architecture.md
 - これは複数の場所からコミットしたときに毎回起きる。焦らずpull→pushの順で解決する
 - clasp pullでConflictが出たらclasp pull --forceで解決する
 - clasp pullはCode.jsで取得される。GitHubにはCode.gsとして管理するのが正式だが、claspの仕様でCode.jsになる点に注意
+
+## claspのファイル拡張子について
+
+- `clasp pull` はGASの `.gs` ファイルをローカルに `.js` として保存する（claspの仕様）
+- `clasp push` はローカルの `.js` をGASに `.gs` として送り返す
+- GitHubに `Code.js` があるのは正常。GASエディタでは `Code.gs` として表示される
+- 混乱しやすいが、動作に問題はない
