@@ -241,13 +241,16 @@ MF照合方式	ホワイトリスト＋照合済みID	docs/decisions/003
 GPT/GAS分担	GPTがOCR、GASが永続化	architecture.md
 stageハンドラ	サブフロー限定（将来用）	architecture.md
 為替レート	77銀行URL動的生成	architecture.md
-未解決・継続課題
-項目	状況	優先度
-カスタムGPTからのAPI呼び出し	GAS内部エラーで調査中	🔴高
-reconcileハンドラのテスト	未実施	🟡中
-global_reviewのテスト	未実施	🟡中
-MFホワイトリストシートの設定	未実施	🟡中
-タイムトリガーの設定（setupTriggers実行）	未実施	🟡中
-複数通貨対応の実動作確認	未実施	🟢低
 
----
+## 未解決・継続課題
+
+| 項目 | 状況 | Claudeへの注意 |
+|------|------|--------------|
+| カスタムGPTからのAPI呼び出し | ✅ 解決済み（2026-03-20）Cloudflare Workers中継で解決 | 詳細はdocs/receipt-agent-lessons.mdを参照 |
+| reconcileハンドラのテスト | 未実施 | testReconcileを作成してGASから直接実行すること |
+| global_reviewのテスト | 未実施 | runGlobalReview_('full')をGASから直接呼び出してテスト |
+| MFホワイトリストシートの設定 | 未実施 | MFホワイトリストシートにベンダー名・口座名を登録してから照合テストを行うこと |
+| タイムトリガー設定 | 未実施 | setupTriggers関数をGASから一度だけ実行する |
+| HOME_OFFICE_WHITELISTのベンダー登録 | 未実施 | 実際の家賃・光熱費・通信費のベンダー名を確認してから設定 |
+| 多通貨での実運用テスト | 未実施 | USD・EUR等でtestFinalizeを実行しfx_rateが正しく取得されるか確認 |
+| 毎回出る確認ダイアログ | 調査中 | OpenAIの仕様。プライバシーポリシーURL設定で改善する可能性あり |
