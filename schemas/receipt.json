@@ -1,4 +1,340 @@
 {
-  "title": "Receipt",
-  "type": "object"
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Receipt Agent API",
+    "description": "領収書自動処理システムのOpenAI Actions用APIスキーマ",
+    "version": "1.5.0"
+  },
+  "servers": [
+    {
+      "url": "https://script.google.com/macros/s/{DEPLOYMENT_ID}/exec",
+      "description": "Google Apps Script Web App"
+    }
+  ],
+  "paths": {
+    "/": {
+      "post": {
+        "operationId": "callReceiptAgent",
+        "summary": "領収書エージェントAPI",
+        "description": "mode パラメータで処理を切り替える統合エンドポイント",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/StageRequest" },
+                  { "$ref": "#/components/schemas/FinalizeRequest" },
+                  { "$ref": "#/components/schemas/ReconcileRequest" },
+                  { "$ref": "#/components/schemas/NoReceiptRequest" },
+                  { "$ref": "#/components/schemas/ReviewRequest" },
+                  { "$ref": "#/components/schemas/GlobalReviewRequest" }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "処理成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "リクエスト不正",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "認証失敗",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "409": {
+            "description": "重複finalize",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "サーバーエラー",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+
+      "StageRequest": {
+        "type": "object",
+        "description": "領収書をGoogle Driveに一時保存する",
+        "required": ["mode", "token", "files"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["stage"] },
+          "token": { "type": "string", "description": "Bearer認証トークン" },
+          "files": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "properties": {
+                "fileId": { "type": "string", "description": "OpenAI fileId" },
+                "url": { "type": "string", "description": "署名付きURL" }
+              }
+            }
+          }
+        }
+      },
+
+      "FinalizeRequest": {
+        "type": "object",
+        "description": "領収書を抽出・正規化・シート登録する",
+        "required": ["mode", "token", "receipts"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["finalize"] },
+          "token": { "type": "string" },
+          "receipts": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "object",
+              "required": ["receiptKey"],
+              "properties": {
+                "receiptKey": {
+                  "type": "string",
+                  "description": "stage APIが返したDrive fileId"
+                },
+                "expenseType": {
+                  "type": "string",
+                  "enum": ["corporate", "personal"],
+                  "default": "corporate",
+                  "description": "経費種別。省略時はcorporate"
+                },
+                "memo": {
+                  "type": "string",
+                  "description": "飲食費の場合は参加者・目的を記載"
+                },
+                "refinalize": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "true の場合のみ再処理を許可"
+                }
+              }
+            }
+          }
+        }
+      },
+
+      "ReconcileRequest": {
+        "type": "object",
+        "description": "銀行データと経費シートを照合する",
+        "required": ["mode", "token", "source", "data"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["reconcile"] },
+          "token": { "type": "string" },
+          "source": {
+            "type": "string",
+            "enum": [
+              "gmo_aozora",
+              "moneyforward",
+              "higashi_yamaguchi",
+              "yucho_passbook"
+            ],
+            "description": "照合データソース"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["date", "amount", "vendor"],
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "description": "取引日 YYYY-MM-DD"
+                },
+                "amount": {
+                  "type": "integer",
+                  "description": "金額（支出はマイナス）"
+                },
+                "vendor": {
+                  "type": "string",
+                  "description": "取引先名"
+                },
+                "mfTransactionId": {
+                  "type": "string",
+                  "description": "MoneyForwardの取引ID（MF照合時のみ）"
+                }
+              }
+            }
+          }
+        }
+      },
+
+      "NoReceiptRequest": {
+        "type": "object",
+        "description": "領収書なし経費（家賃・交通費等）を直接登録する",
+        "required": ["mode", "token", "entry"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["no_receipt"] },
+          "token": { "type": "string" },
+          "entry": {
+            "type": "object",
+            "required": ["transaction_date", "vendor", "debit_account", "original_amount"],
+            "properties": {
+              "transaction_date": {
+                "type": "string",
+                "format": "date",
+                "description": "取引日 YYYY-MM-DD"
+              },
+              "vendor": { "type": "string", "description": "取引先" },
+              "debit_account": { "type": "string", "description": "借方科目" },
+              "original_amount": { "type": "integer", "description": "金額（円）" },
+              "currency": {
+                "type": "string",
+                "default": "JPY",
+                "description": "通貨コード"
+              },
+              "expense_type": {
+                "type": "string",
+                "enum": ["corporate", "personal"],
+                "default": "corporate"
+              },
+              "memo": { "type": "string", "description": "摘要・備考" },
+              "route": {
+                "type": "string",
+                "description": "交通費の場合は経路（例：新馬場→神田）"
+              },
+              "billable_to_client": {
+                "type": "boolean",
+                "default": false,
+                "description": "クライアント請求フラグ"
+              },
+              "client_name": {
+                "type": "string",
+                "description": "請求先クライアント名"
+              }
+            }
+          }
+        }
+      },
+
+      "ReviewRequest": {
+        "type": "object",
+        "description": "needsReview案件を取得・処理する",
+        "required": ["mode", "token"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["review"] },
+          "token": { "type": "string" },
+          "action": {
+            "type": "string",
+            "enum": ["fetch", "approve", "update", "skip"],
+            "description": "fetch=一覧取得 / approve=承認 / update=修正 / skip=スキップ"
+          },
+          "receiptKey": {
+            "type": "string",
+            "description": "approve/update/skip時に対象receiptKeyを指定"
+          },
+          "updates": {
+            "type": "object",
+            "description": "update時に更新するフィールドと値",
+            "additionalProperties": true
+          },
+          "skipReason": {
+            "type": "string",
+            "description": "skip時の理由（学習ログに記録される）"
+          }
+        }
+      },
+
+      "GlobalReviewRequest": {
+        "type": "object",
+        "description": "横断的異常検知を実行する",
+        "required": ["mode", "token"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["global_review"] },
+          "token": { "type": "string" },
+          "reviewMode": {
+            "type": "string",
+            "enum": ["light", "full"],
+            "default": "full",
+            "description": "light=重複検知のみ / full=全チェック"
+          }
+        }
+      },
+
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "partial_ok"],
+            "description": "ok=全件成功 / partial_ok=一部失敗"
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "receiptKey": { "type": "string" },
+                "originalName": { "type": "string" },
+                "fileName": { "type": "string" },
+                "debitAccount": { "type": "string" },
+                "bookedAmount": { "type": "integer" },
+                "needsReview": { "type": "boolean" },
+                "reviewNote": { "type": "string" },
+                "error": { "type": "string" }
+              }
+            }
+          },
+          "message": { "type": "string" }
+        }
+      },
+
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["error"] },
+          "code": {
+            "type": "string",
+            "enum": [
+              "UNAUTHORIZED",
+              "REQUEST_INVALID",
+              "STAGE_DOWNLOAD_FAILED",
+              "DRIVE_SAVE_FAILED",
+              "EXTRACT_FAILED",
+              "REASON_FAILED",
+              "FX_RATE_FAILED",
+              "FARE_FETCH_FAILED",
+              "SHEET_APPEND_FAILED",
+              "LOCK_TIMEOUT",
+              "RECONCILE_FAILED",
+              "ALREADY_FINALIZED"
+            ]
+          },
+          "message": { "type": "string" }
+        }
+      }
+
+    }
+  }
 }
