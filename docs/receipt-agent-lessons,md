@@ -1,106 +1,190 @@
 ---
-name: receipt-agent-lessons
-description: 'receipt-agent開発で学んだノウハウ。仕様書の書き方・Githubとclaspの使い方・Claudeとの協働パターンを次のプロジェクトに活かすときに参照すること。'
+name: receipt-agent-dev
+description: 'receipt-agent開発支援。GASデプロイ・clasp・Script Properties・カスタムGPT連携・経費シート設定で迷ったら必ずこのSkillを参照すること。'
 ---
 
-# Skill: receipt-agent 開発で学んだノウハウ
+# Skill: receipt-agent 開発支援
 
-## Claudeへの指示
+## Claudeへの指示（必ず守ること）
 
-- 新しいプロジェクトを始めるとき、またはこのプロジェクトの開発プロセスを振り返るときにこのSkillを参照すること
-- 「うまくいった方法」「失敗した方法」の両方が書かれている。同じ失敗を繰り返さないこと
-- 仕様書・設計書を作るときは、このSkillのパターンに従うこと
+- このプロジェクトはGASとカスタムGPTの二層構造。**OCR・判断はGPT側、永続化・照合はGAS側**。役割を混同しないこと
+- コード変更後は必ず `clasp pull` → `git push` の順で同期すること
+- `API_TOKEN` `OPENAI_API_KEY` などの機密値は**コードにもSKILL.mdにも絶対に書かない**。Script Propertiesで管理する
+- スプレッドシートへの書き込みは `appendRow_` 経由のみ。直接 `setValues` しない
+- 削除は**論理削除のみ**（`is_deleted=true`）。物理削除は禁止
+- GASのスキーマに `oneOf` は使用禁止。OpenAI Actionsが対応していない。フラット構造にする
+- `handleFinalize_` の中で `extractReceipt_` を呼ばないこと（旧スタブ。削除済みのはず）
+- カスタムGPTがActionsを呼ばず自己完結する場合は、Instructionsの先頭に「callReceiptAgentアクションを必ず呼ぶこと」を追加させる
 
-## GitHubを中心に据えると何がよくなるか
+## プロジェクト概要
 
-### やって良かったこと
+- リポジトリ: https://github.com/koji140/receipt-agent
+- フロントエンド: カスタムGPT（OpenAI）
+- バックエンド: Google Apps Script（GAS）
+- ストレージ: Google Drive / Google Sheets
+- ドキュメント: docs/requirements.md（v1.6）、docs/architecture.md（v1.6）
 
-- **コードの正解をGitHubに置く**: GASエディタは「一時作業場所」、GitHubが「真のソース」という役割分担が明確になった。`clasp pull` でいつでも最新に戻せる
-- **Raw URLで仕様を共有**: `https://raw.githubusercontent.com/...` のURLをClaudeに渡すと、ファイルを丸ごと読み込める。チャットに貼り付けるより確実で分割が起きない
-- **ドキュメントもGitHubに置く**: `docs/` フォルダにrequirements.md・architecture.mdを置いたことで、Claudeが「今の仕様」を正確に参照できるようになった
-- **publicリポジトリにしておく**: Raw URLをClaudeやカスタムGPTから認証なしで取得できる。機密値はScript Propertiesで管理すれば問題なし
+| 担当 | 処理内容 |
+|------|---------|
+| GPT | OCR・情報抽出・勘定科目判定・為替レート取得・ユーザー対話 |
+| GAS | シート登録・Drive保存・銀行照合・ログ・タイムトリガー |
 
-### やらなくて良かったこと
+## 開発環境セットアップ
 
-- チャットにコードを長文で貼り付けること → GitHubのRaw URLを渡す方が速くて確実
-- GASエディタだけで管理すること → バージョン管理ができず、どこが最新かわからなくなる
+### claspインストール（初回のみ）
 
-## claspを使った同期フロー
-
-### うまくいったパターン
-
+```bash
+npm install -g @google/clasp
+clasp --version
+clasp login
 Copy
-GASエディタで動作確認 ↓ clasp pull（GAS → ローカル） ↓ git add / commit / push（ローカル → GitHub）
+リポジトリクローン
+Copy# macOS
+cd ~/Documents
+git clone https://github.com/koji140/receipt-agent.git
+cd receipt-agent
 
+# Windows
+cd C:\Users\{username}\github
+git clone https://github.com/koji140/receipt-agent.git
+cd receipt-agent
+GASプロジェクトとのリンク
+Copycd scripts/gas
+clasp clone {SCRIPT_ID}
+clasp pull
+Windowsで コード.js などの日本語ファイル名が生成された場合は del または ren でリネーム・削除する。
 
-- **GASエディタで先にテストする**: GASは実行・ログ確認が速い。Claudeに直接関数を追加してもらってエディタで動かしてから同期するのが効率的
-- **macはgas-syncエイリアス一発**: `clasp pull` + `git add/commit/push` をまとめたエイリアスを作ると同期コストがゼロになる
-- **Windowsはclasp pullの前にcd確認**: カレントディレクトリが `scripts/gas` になっていないと別の場所にファイルが生成される
+同期エイリアス（macOS）
+Copyalias gas-sync="cd ~/Documents/receipt-agent/scripts/gas && clasp pull && cd ~/Documents/receipt-agent && git add -A && git commit -m 'sync: GASから同期' && git push"
+日常の作業フロー
+GASエディタで編集 → clasp pull → git add/commit/push（macは gas-sync 一発）
 
-### 失敗したこと・注意点
+Script Properties（必須キー）
+キー	値・取得方法
+API_TOKEN	任意の文字列（推測されにくいもの）
+OPENAI_API_KEY	https://platform.openai.com/api-keys
+SPREADSHEET_ID	スプレッドシートURLの /d/ と /edit の間
+DRIVE_FOLDER_ID	DriveフォルダURLの /folders/ 以降
+DRIVE_DELETED_FOLDER_ID	deletedフォルダのID
+AUDIT_LOG_FOLDER_ID	audit-logsフォルダのID
+CREDIT_CORPORATE	短期借入金
+CREDIT_PERSONAL	短期借入金
+CREDIT_GMO	普通預金（GMOあおぞら）
+CREDIT_HIGASHI	普通預金（東山口）
+CREDIT_YUCHO	普通預金（ゆうちょ）
+MAIN_MODEL	gpt-4o
+FX_RATE_MODEL	gpt-4o
+FARE_MODEL	gpt-4o
+HOME_OFFICE_ACCOUNTS	地代家賃,水道光熱費,通信費
+HOME_OFFICE_RATE	0.15
+HOME_OFFICE_WHITELIST	対象ベンダー名をカンマ区切り（後から追加可）
+ANOMALY_THRESHOLD_RATE	3.0
+ANOMALY_MIN_AMOUNT	10000
+LEARNING_RULE_EXPIRE_MONTHS	12
+LEARNING_RULE_MAX	50
+MF_WHITELIST_SHEET	MFホワイトリスト
+BOOKING_DATE_BASIS	payment_date
+一括設定関数
+Copyfunction setupScriptProperties() {
+  PropertiesService.getScriptProperties().setProperties({
+    'MAIN_MODEL':                  'gpt-4o',
+    'FX_RATE_MODEL':               'gpt-4o',
+    'FARE_MODEL':                  'gpt-4o',
+    'HOME_OFFICE_ACCOUNTS':        '地代家賃,水道光熱費,通信費',
+    'HOME_OFFICE_RATE':            '0.15',
+    'ANOMALY_THRESHOLD_RATE':      '3.0',
+    'ANOMALY_MIN_AMOUNT':          '10000',
+    'LEARNING_RULE_EXPIRE_MONTHS': '12',
+    'LEARNING_RULE_MAX':           '50',
+    'MF_WHITELIST_SHEET':          'MFホワイトリスト',
+    'BOOKING_DATE_BASIS':          'payment_date',
+    'CREDIT_CORPORATE':            '短期借入金',
+    'CREDIT_PERSONAL':             '短期借入金',
+    'CREDIT_GMO':                  '普通預金（GMOあおぞら）',
+    'CREDIT_HIGASHI':              '普通預金（東山口）',
+    'CREDIT_YUCHO':                '普通預金（ゆうちょ）'
+  });
+  Logger.log('完了');
+}
+// API_TOKEN・OPENAI_API_KEY・各種IDは機密のため手動で設定すること
+スプレッドシート シート構成
+作成が必要なシート: 経費、変更履歴、監査ログ、意思決定ログ、全体レビューアラート、学習ログ、ルール適用ログ、通知キュー、交通費ペンディング、交通費不要ログ、定期経費マスター、交通費マスター、運賃キャッシュ、マッチングルール、MFホワイトリスト
 
-- `clasp clone` すると日本語ファイル名（`コード.js`）が生成されることがある → 即削除またはリネーム
-- `clasp push` はGASの内容を上書きする。GASエディタで直接編集した内容が消えるので、必ず `clasp pull` を先にする
-- Google Apps Script APIを有効にしないと `clasp login` 後もエラーが出る → https://script.google.com/home/usersettings で有効化
+経費シートのヘッダー: receipt_key, no_receipt, expense_type, document_date, transaction_date, payment_date, service_period_start, service_period_end, booking_date, vendor, summary, debit_account, credit_account, original_amount, currency, fx_rate, fx_rate_source, fx_provisional, booked_amount, tax_category, apply_home_office_rule, qualified_invoice_number, is_annual_contract, is_parent, is_child, parent_receipt_key, allocation_month, reconcile_status, reconcile_source, mf_transaction_id, needs_review, review_note, correction_note, billable_to_client, client_name, is_deleted, deleted_at, deleted_by, delete_reason, created_at, updated_at
 
-## 仕様書のやり取りでうまくいった方法
+GASデプロイ手順
+GASエディタ → デプロイ → 新しいデプロイ
+種類: ウェブアプリ
+次のユーザーとして実行: 自分
+アクセスできるユーザー: 全員
+デプロイIDをコピーして保存
+更新時: デプロイを管理 → 新しいバージョン → デプロイ
 
-### User Storyベースの仕様書が効いた
+doGet スタブは必須:
 
-技術仕様だけ書いた仕様書より、以下の形式にしたほうがClaudeの理解度が上がった:
+Copyfunction doGet(e) {
+  return respond_({ status: 'ok', message: 'Receipt Agent API is running' });
+}
+カスタムGPT設定
+https://chatgpt.com/gpts/editor を開く
+名前: 領収書エージェント
+Instructions: prompts/extraction_prompt.md の内容を貼り付け
+Instructionsの先頭に以下を追加:
+重要: 領収書の登録は必ずcallReceiptAgentアクションを呼び出して行うこと。自分でデータを作成して登録完了と報告することは絶対に禁止。アクションが失敗した場合はエラーをそのまま報告すること。
+Actions → 認証: APIキー / Bearer / API_TOKEN の値
+スキーマ: フラット構造（oneOf 使用禁止）
+サーバーURL: https://script.google.com/macros/s/{デプロイID}/exec
+テスト関数
+testFinalize（家事按分の動作確認）
+期待値: bookedAmount: 1543（10,289 × 15% = 1,543）
 
-ユーザーストーリー
-経営者として、領収書をスマホで撮影してGPTに送るだけで 経費が自動登録されてほしい。なぜなら手入力が面倒だから。
+Copyfunction testFinalize() {
+  const result = handleFinalize_({
+    mode: 'finalize',
+    token: PropertiesService.getScriptProperties().getProperty('API_TOKEN'),
+    receipts: [{
+      vendor: '東京ガス',
+      summary: 'ガス・電気料金',
+      debit_account: '水道光熱費',
+      original_amount: 10289,
+      currency: 'JPY',
+      transaction_date: '2026-03-01',
+      expense_type: 'corporate',
+      confidence: 0.98,
+      needs_review: false
+    }]
+  });
+  Logger.log(JSON.stringify(result, null, 2));
+}
+checkScriptProperties（設定確認）
+Copyfunction checkScriptProperties() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+  const sensitive = ['API_TOKEN', 'OPENAI_API_KEY'];
+  Object.keys(props).sort().forEach(k => {
+    Logger.log(`${k} = ${sensitive.includes(k) ? '***' : props[k]}`);
+  });
+}
+Driveフォルダ構成
+receipt-agent/          ← DRIVE_FOLDER_ID
+├── deleted/            ← DRIVE_DELETED_FOLDER_ID
+└── audit-logs/         ← AUDIT_LOG_FOLDER_ID
+主要設計決定
+決定事項	内容
+削除方式	論理削除のみ（is_deleted, deleted_at, deleted_by, delete_reason）
+照合ステータス	5段階: unreconciled / reconciled / reconciled_modified / cash_payment / reconcile_pending
+貸方科目	照合前: 短期借入金 → 照合後: 口座別の普通預金
+MF照合方式	ホワイトリスト + 照合済みID（二重照合防止）
+家事按分	HOME_OFFICE_ACCOUNTS × HOME_OFFICE_WHITELIST のベンダーに15%適用
+為替レート	77銀行URL動的生成（失敗時は needs_review: true）
+stageハンドラ	サブフロー限定（将来用）。現時点では主処理に使わない
+未解決・継続課題
+項目	状況	Claudeへの注意
+カスタムGPTからのAPI呼び出し	GAS内部エラーで調査中	エラー再現時はGASのログを必ず確認。doGetの有無・デプロイ設定・oneOf使用を最初にチェック
+reconcileハンドラのテスト	未実施	testReconcileを作成してGASから直接実行すること
+global_reviewのテスト	未実施	runGlobalReview_('full')をGASから直接呼び出してテスト
+MFホワイトリストシートの設定	未実施	MFホワイトリストシートにベンダー名・口座名を登録してから照合テストを行うこと
+タイムトリガー設定	未実施	setupTriggers関数をGASから一度だけ実行する
+HOME_OFFICE_WHITELISTのベンダー登録	未実施	実際の家賃・光熱費・通信費のベンダー名を確認してから設定
+多通貨での実運用テスト	未実施	USD・EUR等で testFinalize を実行し fx_rate が正しく取得されるか確認
 
-受け入れ条件
-画像を送ると vendor・amount・date が抽出される
-debit_account が自動判定される
-スプレッドシートの経費シートに1行追加される
-needs_review: true の場合はその旨が返される
-
-### 要件と技術を分けて書く
-
-1ファイルに混在させると混乱する。以下のように分けた:
-
-| ファイル | 内容 |
-|---------|------|
-| docs/requirements.md | 何をするか（ユーザー視点・ビジネスルール） |
-| docs/architecture.md | どう実現するか（技術構成・関数設計） |
-| docs/decisions/ | なぜそう決めたか（ADR形式） |
-
-- Claudeに「要件を変えずに実装方法だけ変えたい」と伝えるときに、ファイルが分かれていると的確な修正ができる
-- 「なぜそう決めたか」をdecisionsに残しておくと、後から「やっぱり変えたい」というときにClaudeが背景を理解した上で提案できる
-
-### Claudeへの指示の渡し方で差が出た
-
-- **良い渡し方**: 「`docs/requirements.md` のv1.6に従って `handleFinalize_` を修正して」→ ファイルを参照させる
-- **悪い渡し方**: 要件を口頭でチャットに長文で書く → 途中で内容がずれる・忘れられる
-- **セッションをまたぐとき**: 「前回の続きから」は通じない。GitHubのファイルURLを渡して「これが現状です」と伝えるとスムーズ
-
-## Claude.aiのSkill登録で学んだこと
-
-### フォーマットのルール（失敗から学んだ）
-
-- YAMLフロントマターの `---` はファイルの**1行目**から始めること。空行があるとエラー
-- `description` は必ずシングルクォートで囲む。日本語の括弧（）がYAMLパーサーに誤認識されることがある
-- `name` は英小文字・数字・ハイフンのみ。スペース・日本語・アンダースコア・大文字は不可
-
-### チャットにMarkdownを貼るとレンダリングで分割される
-
-- Gensparkなど一部のAIチャット環境では `---` が水平線として解釈され、Markdownが視覚的に分割される
-- **対策**: GitHubのWeb UIでファイルを直接作成し、Raw URLでClaudeに渡す
-- チャット上での見た目が分割されていても、GitHubのRaw URLで確認すると正しく1ファイルになっていることが多い
-
-### SkillはAIへの指示として書く
-
-- 手順書として書くとClaudeが「読むだけ」になる
-- 「○○すること」「△△は禁止」「××が出たら必ず確認」という**命令形**で書くとClaudeが従いやすい
-- descriptionの**先頭50文字**が最重要。Claudeがこのスキルを使うかどうかをここで判断する
-
-## 次のプロジェクトでやること
-
-- [ ] リポジトリ作成と同時に `docs/requirements.md`・`docs/architecture.md`・`docs/decisions/` を作る
-- [ ] SKILL.mdを最初から作っておく（後から作ると抜け漏れが多い）
-- [ ] clasp連携はプロジェクト開始時に設定する（後からだと同期ズレが起きる）
-- [ ] Script PropertiesはGitHubに絶対コミットしない。`.gitignore` に `.env` を入れておく
-- [ ] カスタムGPTのスキーマは `oneOf` を使わずフラット構造で最初から設計する
+---
