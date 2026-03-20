@@ -308,3 +308,17 @@ stageハンドラ	サブフロー限定（将来用）	architecture.md
 | HOME_OFFICE_WHITELISTのベンダー登録 | 未実施 | 実際の家賃・光熱費・通信費のベンダー名を確認してから設定 |
 | 多通貨での実運用テスト | 未実施 | USD・EUR等でtestFinalizeを実行しfx_rateが正しく取得されるか確認 |
 | 毎回出る確認ダイアログ | 調査中 | OpenAIの仕様。プライバシーポリシーURL設定で改善する可能性あり |
+
+## Claudeの表示とファイルの実態について
+
+- ClaudeはMarkdownをレンダリングして表示するため、コードブロック内の---や```が崩れて見える
+- これはClaudeの表示の問題であり、GitHubに保存されたファイル自体は正しい
+- ファイルの実態を確認するときは必ずRaw URLで確認すること
+  https://raw.githubusercontent.com/koji140/receipt-agent/main/docs/skill-receipt-agent-dev.md
+
+## Gitの注意事項
+
+- git pushが「rejected」になったら必ずgit pull origin mainを先に実行してからpushする
+- これは複数の場所からコミットしたときに毎回起きる。焦らずpull→pushの順で解決する
+- clasp pullでConflictが出たらclasp pull --forceで解決する
+- clasp pullはCode.jsで取得される。GitHubにはCode.gsとして管理するのが正式だが、claspの仕様でCode.jsになる点に注意
