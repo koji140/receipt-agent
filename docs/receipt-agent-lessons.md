@@ -232,3 +232,12 @@ Copy
 - デプロイIDは新バージョンを作っても変わらない。バージョン番号だけ上がる
 
 ---
+
+## 💡 開発メモ（試行錯誤の感覚）
+
+- **GitHubのWeb UIで長いMarkdownを貼るのは避ける**。Claudeの画面でMDが崩れて見えても、実際のファイルは正しい（表示の問題）
+- **VSCodeで編集するのが一番楽**。`code .`でリポジトリを開いてCtrl+Sで保存、あとはgitコマンド一発
+- **GAS直接POSTは2026年時点で動かない**。Cloudflare Workers経由が必須（詳細はreceipt-agent-lessons.md）
+- **OpenAIのタイムアウトは3〜4秒**。GASの処理が間に合わないのでWorkerで即200を返してバックグラウンド送信
+- **claspはCode.jsで保存するがGAS上はCode.gs**。これは正常、混乱しないこと
+- **git pushが弾かれたらgit pullしてから再push**。複数箇所からコミットすると起きる

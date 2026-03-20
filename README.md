@@ -6,6 +6,15 @@
 
 ---
 
+## 🤖 AIへの引き継ぎ（セッション開始時に必ず読ませること）
+
+新しいAIセッションを始めるときは、以下のURLを渡してください：
+
+- スキル定義・未解決課題：https://raw.githubusercontent.com/koji140/receipt-agent/main/docs/skill-receipt-agent-dev.md
+- バグ取り記録・試行錯誤の経緯：https://raw.githubusercontent.com/koji140/receipt-agent/main/docs/receipt-agent-lessons.md
+
+---
+
 ## 現在の状態・進捗確認
 
 | ドキュメント | 用途 |
