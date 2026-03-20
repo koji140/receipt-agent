@@ -6,81 +6,92 @@
 
 ---
 
+## 現在の状態・進捗確認
+
+| ドキュメント | 用途 |
+|------------|------|
+| [未解決課題・開発Skill](docs/skill-receipt-agent-dev.md) | 次にやること・設定値・テスト関数 |
+| [開発ノウハウ・バグ取り記録](docs/receipt-agent-lessons.md) | 苦労した点・解決策・教訓 |
+| [要件定義書 v1.6](docs/requirements.md) | 何をするか |
+| [技術仕様書 v1.6](docs/architecture.md) | どう実現するか |
+| [設計意思決定ログ](docs/decisions/) | なぜそう決めたか |
+
+---
+
 ## システム構成
 
     [ユーザー]
         ↓ 領収書・指示
     [カスタムGPT（フロントエンド）]
-        ↓ OpenAI Actions（HTTP POST）
+        ↓ POST
+    [Cloudflare Workers（中継）]
+        ↓ GET（バックグラウンド）
     [Google Apps Script（バックエンド）]
         ↓
     [Google Drive]  [Google Sheets]
         領収書保存      経費データ管理
 
+Note: OpenAIからGASへの直接POSTはGoogleのインフラ制限で動作しない（2026年3月現在）。
+Cloudflare Workersを中継として使用。詳細は docs/receipt-agent-lessons.md 参照。
+
 ---
 
 ## 主要機能
 
-| 機能 | 概要 | 優先度 |
-|:--|:--|:--|
-| 領収書アップロード | 最大10件を一括処理、アップロード中は質問なし | P0 |
-| OCR自動抽出 | OpenAI Vision で日付・金額・取引先等を抽出 | P0 |
-| 勘定科目自動判定 | 信頼度0.8以上で自動確定 | P0 |
-| 年額サブスク月割り | 前払費用として計上し月割り自動生成 | P0 |
-| 家事按分15%ルール | 対象科目・取引先ホワイトリストで自動適用 | P0 |
-| 外貨自動換算 | 77銀行仲値をOpenAI経由で動的取得 | P0 |
-| 銀行照合 | GMO・MF・通帳写真と自動照合 | P0 |
-| AIレビューモード | 月末にneedsReview案件を一括提示（B+Cハイブリッド） | P1 |
-| 全体レビュー | 横断的異常検知（重複・月次異常・為替整合性等） | P1 |
-| フィードバック学習 | ユーザー指摘をルールとして自動学習 | P1 |
-| 定期経費自動入力 | 家賃等を月末トリガーで自動登録 | P1 |
-| 交通費自動計算 | OpenAI経由でIC運賃を取得・有効期間キャッシュ管理 | P1 |
+| 機能 | 概要 | 優先度 | 状態 |
+|:--|:--|:--|:--|
+| 領収書アップロード | 最大10件を一括処理 | P0 | 動作確認済み |
+| OCR自動抽出 | OpenAI Vision で日付・金額・取引先等を抽出 | P0 | 動作確認済み |
+| 勘定科目自動判定 | 信頼度0.8以上で自動確定 | P0 | 動作確認済み |
+| 家事按分15%ルール | 対象科目・取引先ホワイトリストで自動適用 | P0 | 動作確認済み |
+| 年額サブスク月割り | 前払費用として計上し月割り自動生成 | P0 | 未テスト |
+| 外貨自動換算 | 77銀行仲値をOpenAI経由で動的取得 | P0 | 未テスト |
+| 銀行照合 | GMO・MF・通帳写真と自動照合 | P0 | 未テスト |
+| AIレビューモード | 月末にneedsReview案件を一括提示 | P1 | 未テスト |
+| 全体レビュー | 横断的異常検知 | P1 | 未テスト |
+| フィードバック学習 | ユーザー指摘をルールとして自動学習 | P1 | 未テスト |
+| 定期経費自動入力 | 家賃等を月末トリガーで自動登録 | P1 | 未テスト |
+| 交通費自動計算 | OpenAI経由でIC運賃を取得 | P1 | 未テスト |
 
 ---
 
 ## リポジトリ構成
 
-```
-receipt-agent/
-├── docs/
-│   ├── overview.md          # プロジェクト概要
-│   ├── requirements.md      # 要件定義書 v1.5
-│   ├── architecture.md      # 技術仕様書 v1.5
-│   └── decisions/           # 設計意思決定ログ
-│       ├── 001_logical_delete.md
-│       ├── 002_reconcile_status.md
-│       ├── 003_mf_whitelist.md
-│       ├── 004_credit_account.md
-│       └── 005_home_office_rule.md
-├── prompts/
-│   └── extraction_prompt.md # カスタムGPTシステムプロンプト
-├── schemas/
-│   └── receipt.json         # OpenAI Actions APIスキーマ
-├── scripts/gas/
-│   └── Code.gs              # Google Apps Scriptコード
-└── test/
-    └── sample.json          # テストデータ
-```
+    receipt-agent/
+    ├── docs/
+    │   ├── requirements.md               # 要件定義書 v1.6
+    │   ├── architecture.md               # 技術仕様書 v1.6
+    │   ├── skill-receipt-agent-dev.md    # 開発Skill・未解決課題（Claude.ai用）
+    │   ├── receipt-agent-lessons.md      # 開発ノウハウ・バグ取り記録
+    │   └── decisions/
+    │       ├── 001_logical_delete.md
+    │       ├── 002_reconcile_status.md
+    │       ├── 003_mf_whitelist.md
+    │       ├── 004_credit_account.md
+    │       └── 005_home_office_rule.md
+    ├── prompts/
+    │   └── extraction_prompt.md          # カスタムGPTシステムプロンプト
+    ├── schemas/
+    │   └── receipt.json                  # OpenAI Actions APIスキーマ
+    ├── scripts/gas/
+    │   └── Code.gs                       # Google Apps Scriptコード（clasp使用時はCode.jsで同期）
+    ├── workers/
+    │   └── receipt-agent-proxy.js        # Cloudflare Workerコード
+    └── test/
+        └── sample.json                   # テストデータ
 
 ---
 
-## ドキュメント
+## 開発ロードマップ
 
-- [プロジェクト概要](docs/overview.md)
-- [要件定義書 v1.5](docs/requirements.md)
-- [技術仕様書 v1.5](docs/architecture.md)
-- [設計意思決定ログ](docs/decisions/)
-
----
-
-## 対象口座・データソース
-
-| 種別 | 名称 | 照合方法 |
+| フェーズ | 内容 | ステータス |
 |:--|:--|:--|
-| 法人口座 | GMOあおぞらネット銀行 | CSV / PDF |
-| 法人口座 | 東山口信用金庫 | 通帳写真 |
-| 法人口座 | ゆうちょ銀行 | 通帳写真 |
-| 家計簿アプリ | MoneyForward ME | CSV / PDF / 画像 |
+| Phase 1 | 仕様設計 | 完了 |
+| Phase 2 | GAS基本実装・カスタムGPT連携 | 完了（2026-03-20） |
+| Phase 3 | 銀行照合実装（reconcile） | 未着手 |
+| Phase 4 | AIレビュー・全体レビュー実装 | 未着手 |
+| Phase 5 | 定期経費・交通費自動化 | 未着手 |
+| Phase 6 | フィードバック学習実装 | 未着手 |
 
 ---
 
@@ -97,25 +108,13 @@ receipt-agent/
 
 ---
 
-## 開発ロードマップ
-
-| フェーズ | 内容 | ステータス |
-|:--|:--|:--|
-| Phase 1 | 仕様設計 | ✅ 完了 |
-| Phase 2 | GAS基本実装（stage / finalize） | 🔲 未着手 |
-| Phase 3 | 銀行照合実装（reconcile） | 🔲 未着手 |
-| Phase 4 | AIレビュー・全体レビュー実装 | 🔲 未着手 |
-| Phase 5 | 定期経費・交通費自動化 | 🔲 未着手 |
-| Phase 6 | フィードバック学習実装 | 🔲 未着手 |
-
----
-
 ## 重要な設計決定
 
 | 決定事項 | 結論 | 詳細 |
 |:--|:--|:--|
-| 削除方式 | 論理削除のみ | [001](docs/decisions/001_logical_delete.md) |
-| 照合ステータス | 5段階管理 | [002](docs/decisions/002_reconcile_status.md) |
-| MF照合方式 | ホワイトリスト＋照合済みID | [003](docs/decisions/003_mf_whitelist.md) |
-| 貸方科目 | 短期借入金→照合後に普通預金 | [004](docs/decisions/004_credit_account.md) |
-| 家事按分 | 15%ルール・ホワイトリスト管理 | [005](docs/decisions/005_home_office_rule.md) |
+| 削除方式 | 論理削除のみ | docs/decisions/001_logical_delete.md |
+| 照合ステータス | 5段階管理 | docs/decisions/002_reconcile_status.md |
+| MF照合方式 | ホワイトリスト＋照合済みID | docs/decisions/003_mf_whitelist.md |
+| 貸方科目 | 短期借入金→照合後に普通預金 | docs/decisions/004_credit_account.md |
+| 家事按分 | 15%ルール・ホワイトリスト管理 | docs/decisions/005_home_office_rule.md |
+| GAS接続方式 | Cloudflare Workers中継 | docs/receipt-agent-lessons.md |
