@@ -10,23 +10,39 @@
 // ============================================================
 
 function doPost(e) {
+  const startTime = new Date().getTime();
+  Logger.log(`[PERF] Request started at ${new Date().toISOString()}`);
+
   try {
     authenticate_(e);
     const payload = JSON.parse(e.postData.contents);
     const mode = payload.mode;
+    Logger.log(`[PERF] Mode: ${mode}`);
 
+    let result;
     switch (mode) {
-      case 'stage':         return respond_(handleStage_(payload));
-      case 'finalize':      return respond_(handleFinalize_(payload));
-      case 'reconcile':     return respond_(handleReconcile_(payload));
-      case 'no_receipt':    return respond_(handleNoReceipt_(payload));
-      case 'review':        return respond_(handleReview_(payload));
-      case 'global_review': return respond_(handleGlobalReview_(payload));
+      case 'stage':         result = handleStage_(payload); break;
+      case 'finalize':      result = handleFinalize_(payload); break;
+      case 'reconcile':     result = handleReconcile_(payload); break;
+      case 'no_receipt':    result = handleNoReceipt_(payload); break;
+      case 'review':        result = handleReview_(payload); break;
+      case 'global_review': result = handleGlobalReview_(payload); break;
       default:
-        return respond_({ status: 'error', code: 'REQUEST_INVALID',
-                          message: `Unknown mode: ${mode}` }, 400);
+        result = { status: 'error', code: 'REQUEST_INVALID',
+                   message: `Unknown mode: ${mode}` };
+        return respond_(result, 400);
     }
+
+    const endTime = new Date().getTime();
+    const duration = endTime - startTime;
+    Logger.log(`[PERF] Request completed in ${duration}ms`);
+
+    return respond_(result);
   } catch (err) {
+    const endTime = new Date().getTime();
+    const duration = endTime - startTime;
+    Logger.log(`[PERF] Request failed in ${duration}ms - Error: ${err.message}`);
+
     const status = err.status || 500;
     return respond_({ status: 'error', code: err.code || 'UNKNOWN',
                       message: err.message }, status);
